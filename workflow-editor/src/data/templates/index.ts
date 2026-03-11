@@ -1,0 +1,108 @@
+import type { WorkflowTemplate } from '@/types';
+
+export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  {
+    id: 'tpl-customer-support',
+    name: 'Customer Support',
+    description: 'Route and respond to customer inquiries with human escalation',
+    category: 'Support',
+    tags: ['agent', 'routing', 'approval'],
+    workflow: {
+      name: 'Customer Support Agent',
+      description: 'Multi-step customer support workflow',
+      tags: ['support'],
+      version: 1,
+      nodes: [
+        { id: 't1', type: 'input', position: { x: 300, y: 60 }, data: { label: 'Customer Message', nodeType: 'input', config: { label: 'Customer Message', inputType: 'text', required: true, defaultValue: '' } } },
+        { id: 't2', type: 'agent', position: { x: 300, y: 220 }, data: { label: 'Support Agent', nodeType: 'agent', config: { model: 'claude-opus-4-6', systemPrompt: 'You are a helpful customer support agent.', temperature: 0.3, maxTokens: 1024, tools: [], memory: true } } },
+        { id: 't3', type: 'condition', position: { x: 300, y: 380 }, data: { label: 'Needs Escalation?', nodeType: 'condition', config: { expression: "{{ needs_human }}", trueLabel: 'Escalate', falseLabel: 'Auto-respond', language: 'jinja2' } } },
+        { id: 't4', type: 'approval', position: { x: 100, y: 540 }, data: { label: 'Human Review', nodeType: 'approval', config: { message: 'Please review this response', approvers: [], timeoutHours: 4, onTimeout: 'reject' } } },
+        { id: 't5', type: 'output', position: { x: 500, y: 540 }, data: { label: 'Send Response', nodeType: 'output', config: { label: 'Response', outputType: 'text', format: '' } } },
+      ],
+      edges: [
+        { id: 'te1', source: 't1', target: 't2', sourceHandle: 'out', targetHandle: 'in' },
+        { id: 'te2', source: 't2', target: 't3', sourceHandle: 'out', targetHandle: 'in' },
+        { id: 'te3', source: 't3', target: 't4', sourceHandle: 'true', targetHandle: 'in' },
+        { id: 'te4', source: 't3', target: 't5', sourceHandle: 'false', targetHandle: 'in' },
+      ],
+    },
+  },
+  {
+    id: 'tpl-data-pipeline',
+    name: 'Data Pipeline',
+    description: 'Fetch, process, and output structured data via API calls',
+    category: 'Integration',
+    tags: ['api', 'data', 'transform'],
+    workflow: {
+      name: 'Data Pipeline',
+      description: 'API fetch, transform, and output',
+      tags: ['data'],
+      version: 1,
+      nodes: [
+        { id: 'd1', type: 'input', position: { x: 300, y: 60 }, data: { label: 'Query Params', nodeType: 'input', config: { label: 'Query Params', inputType: 'json', required: true, defaultValue: '{}' } } },
+        { id: 'd2', type: 'api_call', position: { x: 300, y: 220 }, data: { label: 'Fetch Data', nodeType: 'api_call', config: { method: 'GET', url: 'https://api.example.com/data', headers: {}, bodyTemplate: '', authType: 'bearer', authValue: '', timeoutMs: 30000 } } },
+        { id: 'd3', type: 'agent', position: { x: 300, y: 380 }, data: { label: 'Transform Agent', nodeType: 'agent', config: { model: 'claude-haiku-4-5-20251001', systemPrompt: 'Transform and summarize the following data.', temperature: 0.1, maxTokens: 2048, tools: [], memory: false } } },
+        { id: 'd4', type: 'output', position: { x: 300, y: 540 }, data: { label: 'Processed Data', nodeType: 'output', config: { label: 'Processed Data', outputType: 'json', format: '' } } },
+      ],
+      edges: [
+        { id: 'de1', source: 'd1', target: 'd2', sourceHandle: 'out', targetHandle: 'in' },
+        { id: 'de2', source: 'd2', target: 'd3', sourceHandle: 'out', targetHandle: 'in' },
+        { id: 'de3', source: 'd3', target: 'd4', sourceHandle: 'out', targetHandle: 'in' },
+      ],
+    },
+  },
+  {
+    id: 'tpl-research-loop',
+    name: 'Research Loop',
+    description: 'Iteratively search and synthesize information with a loop',
+    category: 'Research',
+    tags: ['loop', 'research', 'agent'],
+    workflow: {
+      name: 'Research Loop',
+      description: 'Iterative research and synthesis',
+      tags: ['research'],
+      version: 1,
+      nodes: [
+        { id: 'r1', type: 'input', position: { x: 300, y: 60 }, data: { label: 'Research Topic', nodeType: 'input', config: { label: 'Research Topic', inputType: 'text', required: true, defaultValue: '' } } },
+        { id: 'r2', type: 'agent', position: { x: 300, y: 220 }, data: { label: 'Plan Agent', nodeType: 'agent', config: { model: 'claude-opus-4-6', systemPrompt: 'Create a research plan with specific search queries.', temperature: 0.5, maxTokens: 1024, tools: [], memory: false } } },
+        { id: 'r3', type: 'loop', position: { x: 300, y: 380 }, data: { label: 'Search Loop', nodeType: 'loop', config: { loopType: 'for_each', iterableVar: 'queries', condition: '', maxIterations: 10, itemVar: 'query' } } },
+        { id: 'r4', type: 'tool', position: { x: 500, y: 380 }, data: { label: 'Web Search', nodeType: 'tool', config: { toolName: 'web_search', toolType: 'builtin', description: 'Search the web', parameters: {} } } },
+        { id: 'r5', type: 'agent', position: { x: 300, y: 560 }, data: { label: 'Synthesize Agent', nodeType: 'agent', config: { model: 'claude-opus-4-6', systemPrompt: 'Synthesize the research findings into a comprehensive report.', temperature: 0.3, maxTokens: 4096, tools: [], memory: false } } },
+        { id: 'r6', type: 'output', position: { x: 300, y: 720 }, data: { label: 'Research Report', nodeType: 'output', config: { label: 'Research Report', outputType: 'text', format: '' } } },
+      ],
+      edges: [
+        { id: 're1', source: 'r1', target: 'r2', sourceHandle: 'out', targetHandle: 'in' },
+        { id: 're2', source: 'r2', target: 'r3', sourceHandle: 'out', targetHandle: 'in' },
+        { id: 're3', source: 'r3', target: 'r4', sourceHandle: 'body', targetHandle: 'in' },
+        { id: 're4', source: 'r3', target: 'r5', sourceHandle: 'out', targetHandle: 'in' },
+        { id: 're5', source: 'r5', target: 'r6', sourceHandle: 'out', targetHandle: 'in' },
+      ],
+    },
+  },
+  {
+    id: 'tpl-content-moderation',
+    name: 'Content Moderation',
+    description: 'Classify and route content for automated or manual review',
+    category: 'Moderation',
+    tags: ['router', 'classification', 'approval'],
+    workflow: {
+      name: 'Content Moderation',
+      description: 'Automated content classification and routing',
+      tags: ['moderation'],
+      version: 1,
+      nodes: [
+        { id: 'c1', type: 'input', position: { x: 300, y: 60 }, data: { label: 'Content', nodeType: 'input', config: { label: 'Content to Review', inputType: 'text', required: true, defaultValue: '' } } },
+        { id: 'c2', type: 'agent', position: { x: 300, y: 220 }, data: { label: 'Classifier', nodeType: 'agent', config: { model: 'claude-haiku-4-5-20251001', systemPrompt: 'Classify content as: safe, borderline, or unsafe. Return JSON with classification and confidence.', temperature: 0.1, maxTokens: 256, tools: [], memory: false } } },
+        { id: 'c3', type: 'router', position: { x: 300, y: 380 }, data: { label: 'Route by Class', nodeType: 'router', config: { routes: [{ id: 'safe', label: 'Safe', condition: "{{ class == 'safe' }}" }, { id: 'borderline', label: 'Borderline', condition: "{{ class == 'borderline' }}" }], defaultRoute: 'safe' } } },
+        { id: 'c4', type: 'output', position: { x: 100, y: 540 }, data: { label: 'Approved', nodeType: 'output', config: { label: 'Approved Content', outputType: 'text', format: '' } } },
+        { id: 'c5', type: 'approval', position: { x: 500, y: 540 }, data: { label: 'Manual Review', nodeType: 'approval', config: { message: 'Borderline content needs review', approvers: [], timeoutHours: 2, onTimeout: 'reject' } } },
+      ],
+      edges: [
+        { id: 'ce1', source: 'c1', target: 'c2', sourceHandle: 'out', targetHandle: 'in' },
+        { id: 'ce2', source: 'c2', target: 'c3', sourceHandle: 'out', targetHandle: 'in' },
+        { id: 'ce3', source: 'c3', target: 'c4', sourceHandle: 'safe', targetHandle: 'in' },
+        { id: 'ce4', source: 'c3', target: 'c5', sourceHandle: 'borderline', targetHandle: 'in' },
+      ],
+    },
+  },
+];
