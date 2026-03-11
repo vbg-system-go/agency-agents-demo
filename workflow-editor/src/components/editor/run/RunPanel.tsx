@@ -48,10 +48,17 @@ function OutputResultCard({ nodeId }: { nodeId: string }) {
     body = <p className="text-xs text-red-500">{state.error}</p>;
   } else if (state?.output) {
     if (outputType === 'json') {
-      // Strip markdown code fences if the model wrapped the JSON
       let raw = state.output.trim();
-      const fenceMatch = raw.match(/^```(?:json)?\s*([\s\S]*?)```$/);
-      if (fenceMatch) raw = fenceMatch[1].trim();
+
+      // 1. Strip markdown code fences (with or without surrounding text)
+      const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) {
+        raw = fenceMatch[1].trim();
+      } else {
+        // 2. Extract the first JSON object or array found in the text
+        const jsonMatch = raw.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+        if (jsonMatch) raw = jsonMatch[1].trim();
+      }
 
       try {
         const parsed = JSON.parse(raw);
