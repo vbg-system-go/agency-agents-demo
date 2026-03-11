@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { useWorkflowStore } from '@/store/workflowStore';
 import { NODE_TYPE_REGISTRY } from '@/types/node-registry';
 import type { WorkflowNode, AgentConfig, ConditionConfig, ApiCallConfig, LoopConfig, MemoryConfig, ApprovalConfig, PromptConfig, InputConfig, OutputConfig, RouterConfig, LLMProvider } from '@/types';
+import type { ModelsResponse, ModelOption } from '@/app/api/models/route';
 import { Trash2 } from 'lucide-react';
 import { useEditorStore } from '@/store/editorStore';
 
@@ -153,26 +154,52 @@ function NodeConfigFields({ node, updateConfig }: ConfigProps) {
   }
 }
 
-const PROVIDER_MODELS: Record<LLMProvider, { value: string; label: string }[]> = {
-  anthropic: [
-    { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (most capable)' },
-    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (balanced)' },
-    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast / cheap)' },
-  ],
-  openai: [
-    { value: 'gpt-4o', label: 'GPT-4o (most capable)' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini (fast / cheap)' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-    { value: 'o1-mini', label: 'o1-mini (reasoning)' },
-  ],
-};
+// ─── Model catalog (fetched once from /api/models) ────────────────────────────
+
+let _modelsCache: ModelsResponse | null = null;
+
+async function fetchModels(): Promise<ModelsResponse> {
+  if (_modelsCache) return _modelsCache;
+  const res = await fetch('/api/models');
+  if (!res.ok) throw new Error('Failed to fetch models');
+  _modelsCache = await res.json() as ModelsResponse;
+  return _modelsCache;
+}
+
+function toSelectOptions(models: ModelOption[]) {
+  return models.map((m) => ({ value: m.id, label: m.label }));
+}
 
 function AgentFields({ config, update }: { config: Partial<AgentConfig>; update: (p: Record<string, unknown>) => void }) {
   const provider: LLMProvider = config.provider ?? 'anthropic';
-  const models = PROVIDER_MODELS[provider];
-  // When switching providers, reset model to first in new list
+
+  const [allModels, setAllModels] = useState<ModelsResponse | null>(null);
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  useEffect(() => {
+    setLoadingModels(true);
+    fetchModels()
+      .then(setAllModels)
+      .catch(() => setAllModels(null))
+      .finally(() => setLoadingModels(false));
+  }, []);
+
+  const providerModels: { value: string; label: string }[] = allModels
+    ? toSelectOptions(allModels[provider])
+    : provider === 'anthropic'
+      ? [
+          { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+          { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+          { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+        ]
+      : [
+          { value: 'gpt-4o', label: 'GPT-4o' },
+          { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+        ];
+
   const handleProviderChange = (newProvider: string) => {
-    const defaultModel = PROVIDER_MODELS[newProvider as LLMProvider]?.[0]?.value ?? '';
+    const newModels = allModels ? allModels[newProvider as LLMProvider] : [];
+    const defaultModel = newModels[0]?.id ?? '';
     update({ provider: newProvider, model: defaultModel });
   };
 
@@ -188,10 +215,11 @@ function AgentFields({ config, update }: { config: Partial<AgentConfig>; update:
         ]}
       />
       <Select
-        label="Model"
-        value={config.model ?? models[0]?.value ?? ''}
+        label={loadingModels ? 'Model (loading…)' : 'Model'}
+        value={config.model ?? providerModels[0]?.value ?? ''}
         onChange={(e) => update({ model: e.target.value })}
-        options={models}
+        options={providerModels}
+        disabled={loadingModels}
       />
       <Textarea
         label="System Prompt"
