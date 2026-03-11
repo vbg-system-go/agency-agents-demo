@@ -3,7 +3,7 @@
 import React, { useRef, useEffect } from 'react';
 import {
   Play, ChevronDown, ChevronUp, Loader2,
-  CheckCircle2, AlertCircle, Circle,
+  CheckCircle2, AlertCircle, Circle, RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useRunStore } from '@/store/runStore';
@@ -182,6 +182,17 @@ export function RunPanel() {
         <Play className="h-4 w-4 text-violet-600" />
         <span className="text-sm font-semibold text-zinc-800">Run workflow</span>
         <div className="flex-1" />
+        {Object.keys(nodeStates).length > 0 && (
+          <button
+            onClick={resetRun}
+            disabled={isRunning}
+            title="Clear results"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-zinc-200 hover:border-zinc-300 bg-white hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-500 text-xs font-medium transition-colors"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset
+          </button>
+        )}
         <button
           onClick={handleRun}
           disabled={isRunning || !hasNodes}
