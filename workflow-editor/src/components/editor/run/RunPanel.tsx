@@ -87,7 +87,9 @@ export function RunPanel() {
   const workflow = useWorkflowStore((s) => s.workflow);
 
   const inputNodes = workflow.nodes.filter((n) => n.data.nodeType === 'input');
-  const nonInputNodes = workflow.nodes.filter((n) => n.data.nodeType !== 'input');
+  const nonInputNodes = workflow.nodes.filter(
+    (n) => n.data.nodeType !== 'input' && n.data.nodeType !== 'output',
+  );
   const hasNodes = workflow.nodes.length > 0;
 
   const handleRun = async () => {
@@ -252,7 +254,7 @@ export function RunPanel() {
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {nonInputNodes.length === 0 ? (
             <div className="flex items-center justify-center h-full">
-              <p className="text-xs text-zinc-400">Add agent and output nodes to see results here.</p>
+              <p className="text-xs text-zinc-400">Add agent nodes to see results here.</p>
             </div>
           ) : (
             nonInputNodes.map((node) => (
