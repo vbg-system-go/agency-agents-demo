@@ -7,6 +7,7 @@ import { Toolbar } from './toolbar/Toolbar';
 import { NodePalette } from './panels/NodePalette';
 import { PropertiesPanel } from './panels/PropertiesPanel';
 import { WorkflowCanvas } from './canvas/WorkflowCanvas';
+import { RunPanel } from './run/RunPanel';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 function EditorInner() {
@@ -31,6 +32,7 @@ function EditorInner() {
           <PropertiesPanel />
         </aside>
       </div>
+      <RunPanel />
     </div>
   );
 }

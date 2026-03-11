@@ -3,12 +3,13 @@
 import React, { useState } from 'react';
 import {
   Save, FolderOpen, Plus, Undo2, Redo2, Copy, Trash2,
-  Grid3x3, Map, Download, Layers, GitBranch, Zap
+  Grid3x3, Map, Download, Layers, GitBranch, Zap, Play
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useWorkflowStore } from '@/store/workflowStore';
 import { useEditorStore } from '@/store/editorStore';
+import { useRunStore } from '@/store/runStore';
 import { useUndoRedo } from '@/hooks/useTemporalStore';
 import { SaveDialog } from './SaveDialog';
 import { LoadDialog } from './LoadDialog';
@@ -19,6 +20,7 @@ export function Toolbar() {
   const { workflow, newWorkflow, saveCurrentWorkflow, deleteNodes, duplicateNodes, runValidation } = useWorkflowStore();
   const { selectedNodeIds, showMiniMap, showGrid, toggleMiniMap, toggleGrid, isDirty } = useEditorStore();
   const { undo, redo, canUndo, canRedo } = useUndoRedo();
+  const { openPanel: openRunPanel, isRunning } = useRunStore();
 
   const [showSave, setShowSave] = useState(false);
   const [showLoad, setShowLoad] = useState(false);
@@ -140,6 +142,19 @@ export function Toolbar() {
         <Button variant="ghost" size="sm" onClick={runValidation}>
           <Zap className="h-4 w-4" />
           <span className="hidden sm:block">Validate</span>
+        </Button>
+
+        <div className="w-px h-5 bg-zinc-200 mx-1" />
+
+        {/* Run */}
+        <Button
+          size="sm"
+          onClick={openRunPanel}
+          disabled={isRunning}
+          className="bg-violet-600 hover:bg-violet-700 text-white px-3 gap-1.5"
+        >
+          <Play className="h-3.5 w-3.5" />
+          <span className="hidden sm:block">{isRunning ? 'Running…' : 'Run'}</span>
         </Button>
       </div>
 
