@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { useWorkflowStore } from '@/store/workflowStore';
 import { NODE_TYPE_REGISTRY } from '@/types/node-registry';
 import type { WorkflowNode, AgentConfig, ConditionConfig, ApiCallConfig, LoopConfig, MemoryConfig, ApprovalConfig, PromptConfig, InputConfig, OutputConfig, RouterConfig, LLMProvider } from '@/types';
-import type { ModelsResponse, ModelOption } from '@/app/api/models/route';
+import type { ModelsResponse, ModelOption } from '@/types/models';
 import { Trash2 } from 'lucide-react';
 import { useEditorStore } from '@/store/editorStore';
 

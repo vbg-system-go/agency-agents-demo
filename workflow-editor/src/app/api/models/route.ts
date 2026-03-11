@@ -1,22 +1,5 @@
 import { NextResponse } from 'next/server';
-
-export interface ModelPricing {
-  inputPer1M: number | null;   // USD per 1M input tokens
-  outputPer1M: number | null;  // USD per 1M output tokens
-}
-
-export interface ModelOption {
-  id: string;
-  label: string;
-  pricing: ModelPricing;
-  contextWindow?: number;
-  description?: string;
-}
-
-export interface ModelsResponse {
-  anthropic: ModelOption[];
-  openai: ModelOption[];
-}
+import type { ModelPricing, ModelOption, ModelsResponse } from '@/types/models';
 
 // ─── Static Anthropic models (no public list API) ─────────────────────────────
 
