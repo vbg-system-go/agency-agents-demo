@@ -1,5 +1,5 @@
-import { EditorLayout } from '@/components/editor/EditorLayout';
+import { EditorClientWrapper } from '@/components/EditorClientWrapper';
 
 export default function Home() {
-  return <EditorLayout />;
+  return <EditorClientWrapper />;
 }
