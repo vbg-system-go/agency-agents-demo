@@ -9,6 +9,9 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { NODE_TYPE_REGISTRY, NODE_CATEGORIES } from '@/types/node-registry';
 import type { NodeTypeDefinition } from '@/types';
+import { AgentLibraryPanel } from './AgentLibraryPanel';
+
+type Tab = 'blocks' | 'agents';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   Bot, LogIn, LogOut, GitBranch, Network, Wrench,
@@ -63,6 +66,7 @@ function DraggableNodeItem({ def }: { def: NodeTypeDefinition }) {
 }
 
 export function NodePalette() {
+  const [tab, setTab] = useState<Tab>('blocks');
   const [search, setSearch] = useState('');
 
   const allDefs = Object.values(NODE_TYPE_REGISTRY);
@@ -86,52 +90,83 @@ export function NodePalette() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-zinc-100">
-        <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+      {/* Tabs */}
+      <div className="flex border-b border-zinc-200 shrink-0">
+        <button
+          onClick={() => setTab('blocks')}
+          className={cn(
+            'flex-1 py-2.5 text-xs font-semibold transition-colors',
+            tab === 'blocks'
+              ? 'text-violet-600 border-b-2 border-violet-500 bg-white'
+              : 'text-zinc-400 hover:text-zinc-600'
+          )}
+        >
           Blocks
-        </h2>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Search blocks..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-8 rounded-lg border border-zinc-200 bg-zinc-50 pl-8 pr-3 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100 transition-all"
-          />
-        </div>
+        </button>
+        <button
+          onClick={() => setTab('agents')}
+          className={cn(
+            'flex-1 py-2.5 text-xs font-semibold transition-colors',
+            tab === 'agents'
+              ? 'text-violet-600 border-b-2 border-violet-500 bg-white'
+              : 'text-zinc-400 hover:text-zinc-600'
+          )}
+        >
+          Agents
+        </button>
       </div>
 
-      {/* Drag hint */}
-      <div className="px-4 py-2 bg-violet-50/60 border-b border-violet-100/60">
-        <p className="text-[10px] text-violet-600 font-medium">
-          Drag blocks onto the canvas
-        </p>
-      </div>
+      {/* Agents tab */}
+      {tab === 'agents' && <AgentLibraryPanel />}
 
-      {/* Node list */}
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
-        {categorized.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <Search className="h-8 w-8 text-zinc-300 mb-2" />
-            <p className="text-sm text-zinc-400">No blocks match &quot;{search}&quot;</p>
-          </div>
-        ) : (
-          categorized.map(({ key, label, defs }) => (
-            <div key={key}>
-              <p className="px-2 py-1.5 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                {label}
-              </p>
-              <div className="space-y-0.5">
-                {defs.map((def) => (
-                  <DraggableNodeItem key={def.type} def={def} />
-                ))}
-              </div>
+      {/* Blocks tab */}
+      {tab === 'blocks' && (
+        <>
+          {/* Search */}
+          <div className="px-4 pt-3 pb-3 border-b border-zinc-100">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search blocks..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full h-8 rounded-lg border border-zinc-200 bg-zinc-50 pl-8 pr-3 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100 transition-all"
+              />
             </div>
-          ))
-        )}
-      </div>
+          </div>
+
+          {/* Drag hint */}
+          <div className="px-4 py-2 bg-violet-50/60 border-b border-violet-100/60">
+            <p className="text-[10px] text-violet-600 font-medium">
+              Drag blocks onto the canvas
+            </p>
+          </div>
+
+          {/* Node list */}
+          <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
+            {categorized.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                <Search className="h-8 w-8 text-zinc-300 mb-2" />
+                <p className="text-sm text-zinc-400">No blocks match &quot;{search}&quot;</p>
+              </div>
+            ) : (
+              categorized.map(({ key, label, defs }) => (
+                <div key={key}>
+                  <p className="px-2 py-1.5 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                    {label}
+                  </p>
+                  <div className="space-y-0.5">
+                    {defs.map((def) => (
+                      <DraggableNodeItem key={def.type} def={def} />
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

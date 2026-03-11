@@ -13,7 +13,7 @@ interface WorkflowSlice {
   savedWorkflows: WorkflowMeta[];
 
   // Node operations
-  addNode: (type: string, position: { x: number; y: number }) => WorkflowNode;
+  addNode: (type: string, position: { x: number; y: number }, overrides?: Partial<WorkflowNode['data']>) => WorkflowNode;
   updateNode: (id: string, data: Partial<WorkflowNode['data']>) => void;
   updateNodePosition: (id: string, position: { x: number; y: number }) => void;
   deleteNodes: (ids: string[]) => void;
@@ -64,7 +64,7 @@ export const useWorkflowStore = create<WorkflowSlice>()(
       workflow: createDefaultWorkflow(),
       savedWorkflows: [],
 
-      addNode: (type, position) => {
+      addNode: (type, position, overrides) => {
         const def = NODE_TYPE_REGISTRY[type];
         if (!def) throw new Error(`Unknown node type: ${type}`);
 
@@ -75,7 +75,8 @@ export const useWorkflowStore = create<WorkflowSlice>()(
           data: {
             label: def.label,
             nodeType: def.type,
-            config: { ...def.defaultConfig },
+            ...overrides,
+            config: { ...def.defaultConfig, ...(overrides?.config ?? {}) },
           },
         };
 

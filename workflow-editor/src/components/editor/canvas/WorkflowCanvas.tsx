@@ -96,8 +96,6 @@ export function WorkflowCanvas() {
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-      const nodeType = event.dataTransfer.getData('application/reactflow-node-type');
-      if (!nodeType || !NODE_TYPE_REGISTRY[nodeType]) return;
 
       const rect = reactFlowWrapper.current?.getBoundingClientRect();
       if (!rect) return;
@@ -110,6 +108,24 @@ export function WorkflowCanvas() {
 
       const x = (event.clientX - rect.left - matrix.e) / matrix.a;
       const y = (event.clientY - rect.top - matrix.f) / matrix.d;
+
+      // Pre-defined agent from library
+      const agentJson = event.dataTransfer.getData('application/reactflow-agent');
+      if (agentJson) {
+        try {
+          const agent = JSON.parse(agentJson);
+          addNode('agent', { x: x - 90, y: y - 40 }, {
+            label: `${agent.emoji} ${agent.name}`,
+            config: { systemPrompt: agent.systemPrompt },
+          });
+          return;
+        } catch {
+          // fall through to regular drop
+        }
+      }
+
+      const nodeType = event.dataTransfer.getData('application/reactflow-node-type');
+      if (!nodeType || !NODE_TYPE_REGISTRY[nodeType]) return;
 
       addNode(nodeType, { x: x - 90, y: y - 40 });
     },
