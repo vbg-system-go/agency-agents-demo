@@ -15,11 +15,6 @@ export interface ExecutionEvent {
   message?: string;
 }
 
-export interface ApiKeys {
-  anthropic?: string;
-  openai?: string;
-}
-
 // ─── Graph helpers ─────────────────────────────────────────────────────────────
 
 function buildGraph(nodes: WorkflowNode[], edges: WorkflowEdge[]) {
@@ -75,16 +70,16 @@ function topologicalSort(nodes: WorkflowNode[], edges: WorkflowEdge[]): Workflow
 
 // ─── Provider factory ──────────────────────────────────────────────────────────
 
-function getModel(provider: LLMProvider, modelId: string, apiKeys: ApiKeys) {
+function getModel(provider: LLMProvider, modelId: string) {
   if (provider === 'anthropic') {
-    const key = apiKeys.anthropic ?? process.env.ANTHROPIC_API_KEY ?? '';
-    if (!key) throw new Error('Anthropic API key not set. Enter it in the Run panel or set ANTHROPIC_API_KEY.');
+    const key = process.env.ANTHROPIC_API_KEY ?? '';
+    if (!key) throw new Error('Anthropic API key not configured. Set ANTHROPIC_API_KEY on the server.');
     return createAnthropic({ apiKey: key })(modelId);
   }
 
   if (provider === 'openai') {
-    const key = apiKeys.openai ?? process.env.OPENAI_API_KEY ?? '';
-    if (!key) throw new Error('OpenAI API key not set. Enter it in the Run panel or set OPENAI_API_KEY.');
+    const key = process.env.OPENAI_API_KEY ?? '';
+    if (!key) throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY on the server.');
     return createOpenAI({ apiKey: key })(modelId);
   }
 
@@ -95,8 +90,7 @@ function getModel(provider: LLMProvider, modelId: string, apiKeys: ApiKeys) {
 
 export async function* executeWorkflow(
   workflow: Workflow,
-  userInputs: Record<string, string>,
-  apiKeys: ApiKeys
+  userInputs: Record<string, string>
 ): AsyncGenerator<ExecutionEvent> {
   const { nodes, edges } = workflow;
 
@@ -157,7 +151,7 @@ export async function* executeWorkflow(
       let fullOutput = '';
 
       try {
-        const model = getModel(provider, modelId, apiKeys);
+        const model = getModel(provider, modelId);
 
         const result = streamText({
           model,

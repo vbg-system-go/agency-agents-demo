@@ -7,21 +7,14 @@ interface NodeRunState {
   error?: string;
 }
 
-export interface ApiKeys {
-  anthropic: string;
-  openai: string;
-}
-
 interface RunStore {
   isOpen: boolean;
   isRunning: boolean;
-  apiKeys: ApiKeys;
   nodeStates: Record<string, NodeRunState>;
   userInputs: Record<string, string>;
 
   openPanel: () => void;
   closePanel: () => void;
-  setApiKey: (provider: keyof ApiKeys, key: string) => void;
   setUserInput: (nodeId: string, value: string) => void;
   resetRun: () => void;
   setNodeStatus: (nodeId: string, status: NodeStatus) => void;
@@ -34,14 +27,11 @@ interface RunStore {
 export const useRunStore = create<RunStore>((set) => ({
   isOpen: false,
   isRunning: false,
-  apiKeys: { anthropic: '', openai: '' },
   nodeStates: {},
   userInputs: {},
 
   openPanel: () => set({ isOpen: true }),
   closePanel: () => set({ isOpen: false }),
-  setApiKey: (provider, key) =>
-    set((s) => ({ apiKeys: { ...s.apiKeys, [provider]: key } })),
   setUserInput: (nodeId, value) =>
     set((s) => ({ userInputs: { ...s.userInputs, [nodeId]: value } })),
 
