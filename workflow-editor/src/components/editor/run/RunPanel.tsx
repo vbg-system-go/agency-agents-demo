@@ -10,7 +10,7 @@ import { useRunStore } from '@/store/runStore';
 import { useWorkflowStore } from '@/store/workflowStore';
 import type { NodeStatus } from '@/lib/executor';
 import type { ExecutionEvent } from '@/lib/executor';
-import type { LLMProvider } from '@/types';
+import type { LLMProvider, OutputConfig } from '@/types';
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -21,7 +21,88 @@ function StatusBadge({ status }: { status: NodeStatus }) {
   return <Circle className="h-3.5 w-3.5 text-zinc-300 shrink-0" />;
 }
 
-// ─── Node output card ─────────────────────────────────────────────────────────
+// ─── Output result card (for output-type nodes) ───────────────────────────────
+
+function OutputResultCard({ nodeId }: { nodeId: string }) {
+  const state = useRunStore((s) => s.nodeStates[nodeId]);
+  const node = useWorkflowStore((s) => s.workflow.nodes.find((n) => n.id === nodeId));
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (state?.status === 'running') {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [state?.output, state?.status]);
+
+  if (!node) return null;
+
+  const cfg = node.data.config as Partial<OutputConfig>;
+  const label = cfg.label || node.data.label || 'Output';
+  const outputType = cfg.outputType ?? 'text';
+
+  const status: NodeStatus = state?.status ?? 'pending';
+
+  // Render the output body with type-aware formatting
+  let body: React.ReactNode = null;
+  if (state?.error) {
+    body = <p className="text-xs text-red-500">{state.error}</p>;
+  } else if (state?.output) {
+    if (outputType === 'json') {
+      // Strip markdown code fences if the model wrapped the JSON
+      let raw = state.output.trim();
+      const fenceMatch = raw.match(/^```(?:json)?\s*([\s\S]*?)```$/);
+      if (fenceMatch) raw = fenceMatch[1].trim();
+
+      try {
+        const parsed = JSON.parse(raw);
+        body = (
+          <pre className="text-xs text-zinc-700 font-mono leading-relaxed whitespace-pre-wrap">
+            {JSON.stringify(parsed, null, 2)}
+          </pre>
+        );
+      } catch {
+        body = (
+          <>
+            <p className="text-[10px] text-amber-500 mb-1.5">Could not parse as JSON — showing raw output</p>
+            <pre className="text-xs text-zinc-700 whitespace-pre-wrap font-sans leading-relaxed">{state.output}</pre>
+          </>
+        );
+      }
+    } else {
+      body = (
+        <pre className="text-xs text-zinc-700 whitespace-pre-wrap font-sans leading-relaxed">
+          {state.output}
+        </pre>
+      );
+    }
+  }
+
+  return (
+    <div className={cn(
+      'rounded-lg border bg-white overflow-hidden',
+      status === 'running' && 'border-blue-300 shadow-sm shadow-blue-100',
+      status === 'done' && 'border-blue-200',
+      status === 'error' && 'border-red-200',
+      status === 'pending' && 'border-zinc-200 opacity-50',
+    )}>
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-inherit bg-blue-50/40">
+        <StatusBadge status={status} />
+        <span className="text-xs font-semibold text-zinc-700 truncate">{label}</span>
+        <span className="ml-auto text-[10px] uppercase tracking-wide text-blue-500 font-semibold shrink-0">
+          {outputType}
+        </span>
+      </div>
+      {body && (
+        <div className="px-3 py-2.5 max-h-64 overflow-y-auto">
+          {body}
+          <div ref={bottomRef} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Processing node card (agents, tools, etc.) ────────────────────────────────
 
 function NodeOutputCard({ nodeId }: { nodeId: string }) {
   const state = useRunStore((s) => s.nodeStates[nodeId]);
@@ -38,7 +119,6 @@ function NodeOutputCard({ nodeId }: { nodeId: string }) {
 
   const label = node.data.label;
   const nodeType = node.data.nodeType;
-  if (nodeType === 'input') return null;
 
   const cfg = node.data.config as { provider?: LLMProvider; model?: string };
   const modelTag = nodeType === 'agent' ? `${cfg.provider ?? 'anthropic'} · ${cfg.model ?? '—'}` : null;
@@ -87,10 +167,15 @@ export function RunPanel() {
   const workflow = useWorkflowStore((s) => s.workflow);
 
   const inputNodes = workflow.nodes.filter((n) => n.data.nodeType === 'input');
-  const nonInputNodes = workflow.nodes.filter(
+  const outputNodes = workflow.nodes.filter((n) => n.data.nodeType === 'output');
+  const processingNodes = workflow.nodes.filter(
     (n) => n.data.nodeType !== 'input' && n.data.nodeType !== 'output',
   );
   const hasNodes = workflow.nodes.length > 0;
+
+  // If the workflow has explicit output nodes, show those as the result.
+  // Otherwise fall back to showing the processing nodes directly.
+  const hasOutputNodes = outputNodes.length > 0;
 
   const handleRun = async () => {
     resetRun();
@@ -246,18 +331,24 @@ export function RunPanel() {
           )}
 
           {inputNodes.length === 0 && (
-            <p className="text-xs text-zinc-400 italic">Add agent nodes to get started.</p>
+            <p className="text-xs text-zinc-400 italic">Add input nodes to get started.</p>
           )}
         </div>
 
-        {/* Right: node outputs */}
+        {/* Right: results */}
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {nonInputNodes.length === 0 ? (
+          {!hasOutputNodes && processingNodes.length === 0 ? (
             <div className="flex items-center justify-center h-full">
-              <p className="text-xs text-zinc-400">Add agent nodes to see results here.</p>
+              <p className="text-xs text-zinc-400">Add agent and output nodes to see results here.</p>
             </div>
+          ) : hasOutputNodes ? (
+            // Workflow has explicit output nodes — show those as the result
+            outputNodes.map((node) => (
+              <OutputResultCard key={node.id} nodeId={node.id} />
+            ))
           ) : (
-            nonInputNodes.map((node) => (
+            // No output nodes — fall back to showing processing nodes directly
+            processingNodes.map((node) => (
               <NodeOutputCard key={node.id} nodeId={node.id} />
             ))
           )}
