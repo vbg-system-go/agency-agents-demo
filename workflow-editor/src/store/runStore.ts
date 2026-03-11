@@ -3,20 +3,25 @@ import type { NodeStatus } from '@/lib/executor';
 
 interface NodeRunState {
   status: NodeStatus;
-  output: string;   // accumulated text
+  output: string;
   error?: string;
+}
+
+export interface ApiKeys {
+  anthropic: string;
+  openai: string;
 }
 
 interface RunStore {
   isOpen: boolean;
   isRunning: boolean;
-  apiKey: string;
+  apiKeys: ApiKeys;
   nodeStates: Record<string, NodeRunState>;
-  userInputs: Record<string, string>;   // inputNodeId -> value
+  userInputs: Record<string, string>;
 
   openPanel: () => void;
   closePanel: () => void;
-  setApiKey: (key: string) => void;
+  setApiKey: (provider: keyof ApiKeys, key: string) => void;
   setUserInput: (nodeId: string, value: string) => void;
   resetRun: () => void;
   setNodeStatus: (nodeId: string, status: NodeStatus) => void;
@@ -29,13 +34,14 @@ interface RunStore {
 export const useRunStore = create<RunStore>((set) => ({
   isOpen: false,
   isRunning: false,
-  apiKey: '',
+  apiKeys: { anthropic: '', openai: '' },
   nodeStates: {},
   userInputs: {},
 
   openPanel: () => set({ isOpen: true }),
   closePanel: () => set({ isOpen: false }),
-  setApiKey: (apiKey) => set({ apiKey }),
+  setApiKey: (provider, key) =>
+    set((s) => ({ apiKeys: { ...s.apiKeys, [provider]: key } })),
   setUserInput: (nodeId, value) =>
     set((s) => ({ userInputs: { ...s.userInputs, [nodeId]: value } })),
 

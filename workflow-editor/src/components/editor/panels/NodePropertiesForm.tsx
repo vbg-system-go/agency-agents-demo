@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useWorkflowStore } from '@/store/workflowStore';
 import { NODE_TYPE_REGISTRY } from '@/types/node-registry';
-import type { WorkflowNode, AgentConfig, ConditionConfig, ApiCallConfig, LoopConfig, MemoryConfig, ApprovalConfig, PromptConfig, InputConfig, OutputConfig, RouterConfig } from '@/types';
+import type { WorkflowNode, AgentConfig, ConditionConfig, ApiCallConfig, LoopConfig, MemoryConfig, ApprovalConfig, PromptConfig, InputConfig, OutputConfig, RouterConfig, LLMProvider } from '@/types';
 import { Trash2 } from 'lucide-react';
 import { useEditorStore } from '@/store/editorStore';
 
@@ -153,21 +153,45 @@ function NodeConfigFields({ node, updateConfig }: ConfigProps) {
   }
 }
 
+const PROVIDER_MODELS: Record<LLMProvider, { value: string; label: string }[]> = {
+  anthropic: [
+    { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (most capable)' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (balanced)' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast / cheap)' },
+  ],
+  openai: [
+    { value: 'gpt-4o', label: 'GPT-4o (most capable)' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini (fast / cheap)' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+    { value: 'o1-mini', label: 'o1-mini (reasoning)' },
+  ],
+};
+
 function AgentFields({ config, update }: { config: Partial<AgentConfig>; update: (p: Record<string, unknown>) => void }) {
+  const provider: LLMProvider = config.provider ?? 'anthropic';
+  const models = PROVIDER_MODELS[provider];
+  // When switching providers, reset model to first in new list
+  const handleProviderChange = (newProvider: string) => {
+    const defaultModel = PROVIDER_MODELS[newProvider as LLMProvider]?.[0]?.value ?? '';
+    update({ provider: newProvider, model: defaultModel });
+  };
+
   return (
     <div className="space-y-3">
       <Select
-        label="Model"
-        value={config.model ?? 'claude-opus-4-6'}
-        onChange={(e) => update({ model: e.target.value })}
+        label="Provider"
+        value={provider}
+        onChange={(e) => handleProviderChange(e.target.value)}
         options={[
-          { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-          { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-          { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
-          { value: 'gpt-4o', label: 'GPT-4o' },
-          { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-          { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+          { value: 'anthropic', label: 'Anthropic (Claude)' },
+          { value: 'openai', label: 'OpenAI (GPT / o-series)' },
         ]}
+      />
+      <Select
+        label="Model"
+        value={config.model ?? models[0]?.value ?? ''}
+        onChange={(e) => update({ model: e.target.value })}
+        options={models}
       />
       <Textarea
         label="System Prompt"

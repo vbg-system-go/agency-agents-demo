@@ -1,12 +1,30 @@
 'use client';
 
 import React, { useRef, useEffect } from 'react';
-import { Play, X, ChevronDown, ChevronUp, KeyRound, Loader2, CheckCircle2, AlertCircle, Circle } from 'lucide-react';
+import {
+  Play, ChevronDown, ChevronUp, KeyRound, Loader2,
+  CheckCircle2, AlertCircle, Circle,
+} from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useRunStore } from '@/store/runStore';
 import { useWorkflowStore } from '@/store/workflowStore';
 import type { NodeStatus } from '@/lib/executor';
 import type { ExecutionEvent } from '@/lib/executor';
+import type { LLMProvider } from '@/types';
+
+// ─── Which providers does the current workflow use? ───────────────────────────
+
+function useRequiredProviders(): LLMProvider[] {
+  const nodes = useWorkflowStore((s) => s.workflow.nodes);
+  const providers = new Set<LLMProvider>();
+  for (const node of nodes) {
+    if (node.data.nodeType === 'agent') {
+      const cfg = node.data.config as { provider?: LLMProvider };
+      providers.add(cfg.provider ?? 'anthropic');
+    }
+  }
+  return Array.from(providers);
+}
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -34,8 +52,10 @@ function NodeOutputCard({ nodeId }: { nodeId: string }) {
 
   const label = node.data.label;
   const nodeType = node.data.nodeType;
+  if (nodeType === 'input') return null;
 
-  if (nodeType === 'input') return null; // inputs shown in the left form
+  const cfg = node.data.config as { provider?: LLMProvider; model?: string };
+  const modelTag = nodeType === 'agent' ? `${cfg.provider ?? 'anthropic'} · ${cfg.model ?? '—'}` : null;
 
   return (
     <div className={cn(
@@ -48,7 +68,10 @@ function NodeOutputCard({ nodeId }: { nodeId: string }) {
       <div className="flex items-center gap-2 px-3 py-2 border-b border-inherit bg-zinc-50/50">
         <StatusBadge status={state.status} />
         <span className="text-xs font-semibold text-zinc-700 truncate">{label}</span>
-        <span className="ml-auto text-[10px] text-zinc-400 font-medium uppercase tracking-wide">{nodeType}</span>
+        {modelTag && (
+          <span className="ml-1 text-[10px] text-zinc-400 truncate">{modelTag}</span>
+        )}
+        <span className="ml-auto text-[10px] text-zinc-400 font-medium uppercase tracking-wide shrink-0">{nodeType}</span>
       </div>
       {(state.output || state.error) && (
         <div className="px-3 py-2.5 max-h-64 overflow-y-auto">
@@ -66,25 +89,64 @@ function NodeOutputCard({ nodeId }: { nodeId: string }) {
   );
 }
 
+// ─── API key section ──────────────────────────────────────────────────────────
+
+const PROVIDER_META: Record<LLMProvider, { label: string; placeholder: string; envVar: string }> = {
+  anthropic: { label: 'Anthropic', placeholder: 'sk-ant-…', envVar: 'ANTHROPIC_API_KEY' },
+  openai:    { label: 'OpenAI',    placeholder: 'sk-…',     envVar: 'OPENAI_API_KEY'    },
+};
+
+function ApiKeyFields({ providers }: { providers: LLMProvider[] }) {
+  const { apiKeys, setApiKey } = useRunStore();
+
+  if (providers.length === 0) return null;
+
+  return (
+    <div>
+      <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1 mb-1.5">
+        <KeyRound className="h-3 w-3" /> API Keys
+      </label>
+      <div className="space-y-2">
+        {providers.map((p) => {
+          const meta = PROVIDER_META[p];
+          return (
+            <div key={p}>
+              <p className="text-[10px] text-zinc-500 mb-0.5">{meta.label}</p>
+              <input
+                type="password"
+                placeholder={`${meta.placeholder} or set ${meta.envVar}`}
+                value={apiKeys[p]}
+                onChange={(e) => setApiKey(p, e.target.value)}
+                className="w-full h-7 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-800 placeholder:text-zinc-300 focus:border-violet-300 focus:outline-none focus:ring-1 focus:ring-violet-100"
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export function RunPanel() {
-  const { isOpen, isRunning, apiKey, userInputs, nodeStates, openPanel, closePanel,
-    setApiKey, setUserInput, resetRun, setNodeStatus, appendNodeChunk, setNodeDone,
-    setNodeError, setRunning } = useRunStore();
+  const {
+    isOpen, isRunning, apiKeys, userInputs, nodeStates,
+    openPanel, closePanel, setUserInput, resetRun,
+    setNodeStatus, appendNodeChunk, setNodeDone, setNodeError, setRunning,
+  } = useRunStore();
 
   const workflow = useWorkflowStore((s) => s.workflow);
+  const requiredProviders = useRequiredProviders();
 
   const inputNodes = workflow.nodes.filter((n) => n.data.nodeType === 'input');
   const nonInputNodes = workflow.nodes.filter((n) => n.data.nodeType !== 'input');
-
   const hasNodes = workflow.nodes.length > 0;
 
   const handleRun = async () => {
     resetRun();
     setRunning(true);
 
-    // Mark all nodes as pending
     for (const node of workflow.nodes) {
       setNodeStatus(node.id, 'pending');
     }
@@ -96,7 +158,10 @@ export function RunPanel() {
         body: JSON.stringify({
           workflow,
           inputs: userInputs,
-          apiKey: apiKey || undefined,
+          apiKeys: {
+            anthropic: apiKeys.anthropic || undefined,
+            openai: apiKeys.openai || undefined,
+          },
         }),
       });
 
@@ -134,6 +199,8 @@ export function RunPanel() {
             setNodeDone(event.nodeId, event.output ?? '');
           } else if (event.type === 'node_error' && event.nodeId) {
             setNodeError(event.nodeId, event.message ?? 'Error');
+          } else if (event.type === 'workflow_error') {
+            alert(`Workflow error: ${event.message}`);
           }
         }
       }
@@ -167,7 +234,7 @@ export function RunPanel() {
 
   return (
     <div className="border-t border-zinc-200 bg-zinc-50 flex flex-col shrink-0" style={{ height: '340px' }}>
-      {/* Panel header */}
+      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-200 bg-white shrink-0">
         <Play className="h-4 w-4 text-violet-600" />
         <span className="text-sm font-semibold text-zinc-800">Run workflow</span>
@@ -177,37 +244,23 @@ export function RunPanel() {
           disabled={isRunning || !hasNodes}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
         >
-          {isRunning ? (
-            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…</>
-          ) : (
-            <><Play className="h-3.5 w-3.5" /> Run</>
-          )}
+          {isRunning
+            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…</>
+            : <><Play className="h-3.5 w-3.5" /> Run</>
+          }
         </button>
         <button onClick={closePanel} className="text-zinc-400 hover:text-zinc-600 ml-1">
           <ChevronDown className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Panel body */}
+      {/* Body */}
       <div className="flex flex-1 min-h-0 divide-x divide-zinc-200">
 
-        {/* Left: inputs + API key */}
-        <div className="w-64 shrink-0 flex flex-col gap-3 p-3 overflow-y-auto">
-          {/* API key */}
-          <div>
-            <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-              <KeyRound className="h-3 w-3" /> API Key
-            </label>
-            <input
-              type="password"
-              placeholder="sk-ant-… (or set env var)"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="w-full h-7 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-800 placeholder:text-zinc-300 focus:border-violet-300 focus:outline-none focus:ring-1 focus:ring-violet-100"
-            />
-          </div>
+        {/* Left: API keys + inputs */}
+        <div className="w-72 shrink-0 flex flex-col gap-3 p-3 overflow-y-auto">
+          <ApiKeyFields providers={requiredProviders} />
 
-          {/* Input node fields */}
           {inputNodes.length > 0 && (
             <div>
               <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
@@ -215,7 +268,7 @@ export function RunPanel() {
               </p>
               <div className="space-y-2">
                 {inputNodes.map((node) => {
-                  const cfg = node.data.config as { label?: string; description?: string; inputType?: string };
+                  const cfg = node.data.config as { label?: string; description?: string };
                   return (
                     <div key={node.id}>
                       <label className="text-xs font-medium text-zinc-600 block mb-0.5">
@@ -238,8 +291,8 @@ export function RunPanel() {
             </div>
           )}
 
-          {inputNodes.length === 0 && (
-            <p className="text-xs text-zinc-400 italic">No input nodes in workflow.</p>
+          {inputNodes.length === 0 && requiredProviders.length === 0 && (
+            <p className="text-xs text-zinc-400 italic">Add agent nodes to get started.</p>
           )}
         </div>
 

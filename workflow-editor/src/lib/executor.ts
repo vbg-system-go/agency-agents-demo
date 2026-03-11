@@ -1,22 +1,31 @@
-import Anthropic from '@anthropic-ai/sdk';
-import type { Workflow, WorkflowNode, WorkflowEdge } from '@/types';
+// This file is server-only — only imported by /api/run/route.ts
+import { streamText } from 'ai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+import type { Workflow, WorkflowNode, WorkflowEdge, LLMProvider } from '@/types';
 
 export type NodeStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped';
 
 export interface ExecutionEvent {
   type: 'node_start' | 'node_chunk' | 'node_done' | 'node_error' | 'workflow_done' | 'workflow_error';
   nodeId?: string;
-  text?: string;      // for node_chunk
-  output?: string;    // for node_done
-  outputs?: Record<string, string>; // for workflow_done
-  message?: string;   // for errors
+  text?: string;
+  output?: string;
+  outputs?: Record<string, string>;
+  message?: string;
 }
 
-// Build adjacency list and compute in-degree for topological sort
+export interface ApiKeys {
+  anthropic?: string;
+  openai?: string;
+}
+
+// ─── Graph helpers ─────────────────────────────────────────────────────────────
+
 function buildGraph(nodes: WorkflowNode[], edges: WorkflowEdge[]) {
   const inDegree: Record<string, number> = {};
-  const adjList: Record<string, string[]> = {};   // nodeId -> downstream nodeIds
-  const predecessors: Record<string, string[]> = {}; // nodeId -> upstream nodeIds
+  const adjList: Record<string, string[]> = {};
+  const predecessors: Record<string, string[]> = {};
 
   for (const node of nodes) {
     inDegree[node.id] = 0;
@@ -33,17 +42,16 @@ function buildGraph(nodes: WorkflowNode[], edges: WorkflowEdge[]) {
   return { inDegree, adjList, predecessors };
 }
 
-// Kahn's algorithm — returns nodes in execution order
 function topologicalSort(nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowNode[] {
   const { inDegree, adjList } = buildGraph(nodes, edges);
   const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const degrees = { ...inDegree };
 
   const queue: string[] = [];
-  for (const [id, deg] of Object.entries(inDegree)) {
+  for (const [id, deg] of Object.entries(degrees)) {
     if (deg === 0) queue.push(id);
   }
-
-  // Prioritize input nodes first
+  // Input nodes first
   queue.sort((a, b) => {
     const ta = nodeMap[a]?.data.nodeType;
     const tb = nodeMap[b]?.data.nodeType;
@@ -53,28 +61,43 @@ function topologicalSort(nodes: WorkflowNode[], edges: WorkflowEdge[]): Workflow
   });
 
   const result: WorkflowNode[] = [];
-  const degrees = { ...inDegree };
-
   while (queue.length > 0) {
     const id = queue.shift()!;
     const node = nodeMap[id];
     if (node) result.push(node);
-
     for (const next of adjList[id]) {
       degrees[next]--;
       if (degrees[next] === 0) queue.push(next);
     }
   }
-
   return result;
 }
+
+// ─── Provider factory ──────────────────────────────────────────────────────────
+
+function getModel(provider: LLMProvider, modelId: string, apiKeys: ApiKeys) {
+  if (provider === 'anthropic') {
+    const key = apiKeys.anthropic ?? process.env.ANTHROPIC_API_KEY ?? '';
+    if (!key) throw new Error('Anthropic API key not set. Enter it in the Run panel or set ANTHROPIC_API_KEY.');
+    return createAnthropic({ apiKey: key })(modelId);
+  }
+
+  if (provider === 'openai') {
+    const key = apiKeys.openai ?? process.env.OPENAI_API_KEY ?? '';
+    if (!key) throw new Error('OpenAI API key not set. Enter it in the Run panel or set OPENAI_API_KEY.');
+    return createOpenAI({ apiKey: key })(modelId);
+  }
+
+  throw new Error(`Unknown provider: ${provider}`);
+}
+
+// ─── Main executor ─────────────────────────────────────────────────────────────
 
 export async function* executeWorkflow(
   workflow: Workflow,
   userInputs: Record<string, string>,
-  apiKey: string
+  apiKeys: ApiKeys
 ): AsyncGenerator<ExecutionEvent> {
-  const client = new Anthropic({ apiKey });
   const { nodes, edges } = workflow;
 
   if (nodes.length === 0) {
@@ -84,30 +107,24 @@ export async function* executeWorkflow(
 
   const order = topologicalSort(nodes, edges);
   const { predecessors } = buildGraph(nodes, edges);
-
-  // nodeId → text output produced by that node
   const nodeOutputs: Record<string, string> = {};
 
-  // Pre-fill input node outputs from userInputs
+  // Seed input node outputs
   for (const node of nodes) {
     if (node.data.nodeType === 'input') {
       nodeOutputs[node.id] = userInputs[node.id] ?? '';
     }
   }
 
-  const finalOutputs: Record<string, string> = {};
-
   for (const node of order) {
-    const { nodeType, config, label } = node.data;
+    const { nodeType, config } = node.data;
 
-    // Gather text from all upstream nodes
     const upstreamText = predecessors[node.id]
       .map((pid) => nodeOutputs[pid] ?? '')
       .filter(Boolean)
       .join('\n\n');
 
     if (nodeType === 'input') {
-      // Already set above — just emit done
       yield { type: 'node_start', nodeId: node.id };
       yield { type: 'node_done', nodeId: node.id, output: nodeOutputs[node.id] };
       continue;
@@ -117,7 +134,6 @@ export async function* executeWorkflow(
       yield { type: 'node_start', nodeId: node.id };
       const out = upstreamText || '(no input)';
       nodeOutputs[node.id] = out;
-      finalOutputs[node.id] = out;
       yield { type: 'node_done', nodeId: node.id, output: out };
       continue;
     }
@@ -125,30 +141,35 @@ export async function* executeWorkflow(
     if (nodeType === 'agent') {
       yield { type: 'node_start', nodeId: node.id };
 
-      const agentConfig = config as { systemPrompt?: string; model?: string; temperature?: number; maxTokens?: number };
-      const systemPrompt = agentConfig.systemPrompt ?? 'You are a helpful assistant.';
-      const model = agentConfig.model ?? 'claude-sonnet-4-6';
+      const agentCfg = config as {
+        provider?: LLMProvider;
+        model?: string;
+        systemPrompt?: string;
+        temperature?: number;
+        maxTokens?: number;
+      };
+
+      const provider: LLMProvider = agentCfg.provider ?? 'anthropic';
+      const modelId = agentCfg.model ?? (provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o-mini');
+      const systemPrompt = agentCfg.systemPrompt ?? 'You are a helpful assistant.';
       const userMessage = upstreamText || 'Begin.';
 
       let fullOutput = '';
 
       try {
-        const stream = client.messages.stream({
+        const model = getModel(provider, modelId, apiKeys);
+
+        const result = streamText({
           model,
-          max_tokens: agentConfig.maxTokens ?? 4096,
           system: systemPrompt,
           messages: [{ role: 'user', content: userMessage }],
+          temperature: agentCfg.temperature ?? 0.7,
+          maxOutputTokens: agentCfg.maxTokens ?? 4096,
         });
 
-        for await (const chunk of stream) {
-          if (
-            chunk.type === 'content_block_delta' &&
-            chunk.delta.type === 'text_delta'
-          ) {
-            const text = chunk.delta.text;
-            fullOutput += text;
-            yield { type: 'node_chunk', nodeId: node.id, text };
-          }
+        for await (const chunk of result.textStream) {
+          fullOutput += chunk;
+          yield { type: 'node_chunk', nodeId: node.id, text: chunk };
         }
 
         nodeOutputs[node.id] = fullOutput;
@@ -161,12 +182,12 @@ export async function* executeWorkflow(
       continue;
     }
 
-    // All other node types — pass through
+    // Pass-through for all other node types
     yield { type: 'node_start', nodeId: node.id };
     const out = upstreamText || '';
     nodeOutputs[node.id] = out;
     yield { type: 'node_done', nodeId: node.id, output: out };
   }
 
-  yield { type: 'workflow_done', outputs: finalOutputs };
+  yield { type: 'workflow_done', outputs: nodeOutputs };
 }

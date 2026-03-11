@@ -27,7 +27,10 @@ export interface NodeHandle {
 
 // ─── Node Config Variants ─────────────────────────────────────────────────────
 
+export type LLMProvider = 'anthropic' | 'openai';
+
 export interface AgentConfig {
+  provider: LLMProvider;
   model: string;
   systemPrompt: string;
   temperature: number;
